@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-adsense-account" content="ca-pub-8652289169105212">
+    <title>Interactive Hangar Layout</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+    </style>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8652289169105212" crossorigin="anonymous"></script>
+</head>
+<body>
+    <h1 style="text-align: center;">Interactive Hangar Layout</h1>
+    <div class="controls">
+        <label for="hangarWidth">Hangar Width (ft):</label>
+        <input type="number" id="hangarWidth" value="50" step="1">
+        <label for="hangarLength">Hangar Length (ft):</label>
+        <input type="number" id="hangarLength" value="50" step="1">
+        <button id="updateHangarButton">Update Hangar Size</button>
+        <br><br>
+        <label for="aircraftSelect">Select Aircraft:</label>
+        <select id="aircraftSelect"></select>
+        <br><br>
+        <label for="aircraftName">Name:</label>
+        <input type="text" id="aircraftName">
+        <label for="wingSpan">Wing Span (ft):</label>
+        <input type="number" id="wingSpan" step="1">
+        <label for="wingWidth">Wing Width (ft):</label>
+        <input type="number" id="wingWidth" step="1">
+        <label for="fuselageWidth">Fuselage Width (ft):</label>
+        <input type="number" id="fuselageWidth" step="1">
+        <label for="fuselageLength">Fuselage Length (ft):</label>
+        <input type="number" id="fuselageLength" step="1">
+        <label for="noseToWing">Nose to Wing (ft):</label>
+        <input type="number" id="noseToWing" step="1">
+        <label for="tailSpan">Tail Span (ft):</label>
+        <input type="number" id="tailSpan" step="1">
+        <label for="tailWidth">Tail Width (ft):</label>
+        <input type="number" id="tailWidth" step="1">
+        <label for="rotation">Rotation (degrees):</label>
+        <input type="number" id="rotation" step="1">
+        <br><br>
+        <button id="updateAircraftButton">Update Aircraft</button>
+        <p><strong>Tip:</strong> Drag to move aircraft. Hold <kbd>Shift</kbd> and drag to rotate.</p>
+    </div>
+    <canvas id="hangarCanvas"></canvas>
+
+    <script>
+        // Default hangar dimensions
+        let hangarWidth = 50; // in feet
+        let hangarHeight = 50; // in feet
+
+        // Default aircraft data
+        const aircraft = [
+            {
+                id: 1,
+                name: "RV-4",
+                wingSpan: 23, // feet
+                wingWidth: 2, // feet
+                fuselageWidth: 3, // feet
+                fuselageLength: 20, // feet
+                noseToWing: 6, // feet
+                tailSpan: 8, // feet
+                tailWidth: 1.5, // feet
+                x: 11.9, // initial position (center of fuselage)
+                y: 38.7, // initial position (center of fuselage)
+                rotation: -36.11647289802434, // degrees
+                color: "blue"
+            },
+            {
+                id: 2,
+                name: "Supercub",
+                wingSpan: 35,
+                wingWidth: 2.5,
+                fuselageWidth: 4,
+                fuselageLength: 22.75,
+                noseToWing: 7,
+                tailSpan: 8,
+                tailWidth: 2,
+                x: 31.2,
+                y: 30.1,
+                rotation: 24.84110104400356,
+                color: "green"
+            }
+        ];
+
+        // Scale factor for feet to pixels
+        const scaleFactor = 10;
+
+        // Canvas setup
+        const canvas = document.getElementById('hangarCanvas');
+        canvas.width = hangarWidth * scaleFactor;
+        canvas.height = hangarHeight * scaleFactor;
+        const ctx = canvas.getContext('2d');
+
+        // Controls setup
+        const hangarWidthInput = document.getElementById('hangarWidth');
+        const hangarLengthInput = document.getElementById('hangarLength');
+        const updateHangarButton = document.getElementById('updateHangarButton');
+        const aircraftSelect = document.getElementById('aircraftSelect');
+        const aircraftNameInput = document.getElementById('aircraftName');
+        const wingSpanInput = document.getElementById('wingSpan');
+        const wingWidthInput = document.getElementById('wingWidth');
+        const fuselageWidthInput = document.getElementById('fuselageWidth');
+        const fuselageLengthInput = document.getElementById('fuselageLength');
+        const noseToWingInput = document.getElementById('noseToWing');
+        const tailSpanInput = document.getElementById('tailSpan');
+        const tailWidthInput = document.getElementById('tailWidth');
+        const rotationInput = document.getElementById('rotation');
+        const updateAircraftButton = document.getElementById('updateAircraftButton');
+
+        // Dragging and rotating state
+        let draggingAircraft = null;
+        let offsetX = 0;
+        let offsetY = 0;
+        let rotating = false;
+        let initialMouseAngle = 0;
+        let initialRotation = 0;
+
+        // Populate aircraft dropdown
+        function populateAircraftDropdown() {
+            aircraftSelect.innerHTML = '';
+            aircraft.forEach(ac => {
+                const option = document.createElement('option');
+                option.value = ac.id;
+                option.textContent = ac.name;
+                aircraftSelect.appendChild(option);
+            });
+        }
+
+        // Update form with selected aircraft details
+        function updateFormFields() {
+            const selectedAircraft = aircraft.find(ac => ac.id === parseInt(aircraftSelect.value));
+            if (selectedAircraft) {
+                aircraftNameInput.value = selectedAircraft.name;
+                wingSpanInput.value = selectedAircraft.wingSpan;
+                wingWidthInput.value = selectedAircraft.wingWidth;
+                fuselageWidthInput.value = selectedAircraft.fuselageWidth;
+                fuselageLengthInput.value = selectedAircraft.fuselageLength;
+                noseToWingInput.value = selectedAircraft.noseToWing;
+                tailSpanInput.value = selectedAircraft.tailSpan;
+                tailWidthInput.value = selectedAircraft.tailWidth;
+                rotationInput.value = selectedAircraft.rotation;
+            }
+        }
+
+        // Update aircraft properties based on form inputs
+        function updateAircraftProperties() {
+            const selectedAircraft = aircraft.find(ac => ac.id === parseInt(aircraftSelect.value));
+            if (selectedAircraft) {
+                selectedAircraft.name = aircraftNameInput.value;
+                selectedAircraft.wingSpan = parseFloat(wingSpanInput.value);
+                selectedAircraft.wingWidth = parseFloat(wingWidthInput.value);
+                selectedAircraft.fuselageWidth = parseFloat(fuselageWidthInput.value);
+                selectedAircraft.fuselageLength = parseFloat(fuselageLengthInput.value);
+                selectedAircraft.noseToWing = parseFloat(noseToWingInput.value);
+                selectedAircraft.tailSpan = parseFloat(tailSpanInput.value);
+                selectedAircraft.tailWidth = parseFloat(tailWidthInput.value);
+                selectedAircraft.rotation = parseFloat(rotationInput.value);
+                redraw();
+            }
+        }
+
+        // Update hangar size
+        function updateHangarSize() {
+            hangarWidth = parseFloat(hangarWidthInput.value);
+            hangarHeight = parseFloat(hangarLengthInput.value);
+            canvas.width = hangarWidth * scaleFactor;
+            canvas.height = hangarHeight * scaleFactor;
+            redraw();
+        }
+
+        // Draw hangar
+        function drawHangar() {
+            ctx.fillStyle = "#f0f0f0";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = "#000";
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // Draw an individual aircraft with rotation
+        function drawAircraftShape(ac) {
+            ctx.save();
+            const centerX = ac.x * scaleFactor;
+            const centerY = ac.y * scaleFactor;
+
+            // Apply rotation
+            ctx.translate(centerX, centerY);
+            ctx.rotate((ac.rotation * Math.PI) / 180);
+
+            const wingSpanPx = ac.wingSpan * scaleFactor;
+            const wingWidthPx = ac.wingWidth * scaleFactor;
+            const fuselageWidthPx = ac.fuselageWidth * scaleFactor;
+            const fuselageLengthPx = ac.fuselageLength * scaleFactor;
+            const noseToWingPx = ac.noseToWing * scaleFactor;
+            const tailSpanPx = ac.tailSpan * scaleFactor;
+            const tailWidthPx = ac.tailWidth * scaleFactor;
+
+            ctx.fillStyle = ac.color;
+
+            // Draw wings
+            ctx.fillRect(
+                -wingSpanPx / 2,
+                -fuselageLengthPx / 2 + noseToWingPx,
+                wingSpanPx,
+                wingWidthPx
+            );
+
+            // Draw fuselage
+            ctx.fillRect(
+                -fuselageWidthPx / 2,
+                -fuselageLengthPx / 2,
+                fuselageWidthPx,
+                fuselageLengthPx
+            );
+
+            // Draw tail
+            ctx.fillStyle = "darkgray";
+            ctx.fillRect(
+                -tailSpanPx / 2,
+                fuselageLengthPx / 2 - tailWidthPx,
+                tailSpanPx,
+                tailWidthPx
+            );
+
+            ctx.restore();
+        }
+
+        // Draw all aircraft
+        function drawAircraft() {
+            aircraft.forEach(drawAircraftShape);
+        }
+
+        // Redraw canvas
+        function redraw() {
+            drawHangar();
+            drawAircraft();
+        }
+
+        // Mouse down event
+        canvas.addEventListener('mousedown', (e) => {
+            const mouseX = e.offsetX / scaleFactor;
+            const mouseY = e.offsetY / scaleFactor;
+
+            // Check if mouse is over any aircraft
+            aircraft.forEach(ac => {
+                const dx = mouseX - ac.x;
+                const dy = mouseY - ac.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const wingSpan = ac.wingSpan / 2;
+
+                if (distance <= wingSpan) {
+                    draggingAircraft = ac;
+
+                    if (e.shiftKey) {
+                        rotating = true;
+                        initialMouseAngle = Math.atan2(dy, dx);
+                        initialRotation = ac.rotation;
+                    } else {
+                        offsetX = dx;
+                        offsetY = dy;
+                    }
+                }
+            });
+        });
+
+        // Mouse move event
+        canvas.addEventListener('mousemove', (e) => {
+            if (draggingAircraft) {
+                const mouseX = e.offsetX / scaleFactor;
+                const mouseY = e.offsetY / scaleFactor;
+
+                if (rotating) {
+                    const dx = mouseX - draggingAircraft.x;
+                    const dy = mouseY - draggingAircraft.y;
+                    const angle = Math.atan2(dy, dx);
+                    draggingAircraft.rotation = initialRotation + (angle - initialMouseAngle) * (180 / Math.PI);
+                } else {
+                    draggingAircraft.x = mouseX - offsetX;
+                    draggingAircraft.y = mouseY - offsetY;
+                }
+                redraw();
+            }
+        });
+
+        // Mouse up event
+        canvas.addEventListener('mouseup', () => {
+            draggingAircraft = null;
+            rotating = false;
+        });
+
+        // Initialize the UI
+        aircraftSelect.addEventListener('change', updateFormFields);
+        updateAircraftButton.addEventListener('click', updateAircraftProperties);
+        updateHangarButton.addEventListener('click', updateHangarSize);
+        populateAircraftDropdown();
+        updateFormFields();
+        redraw();
+    </script>
+</body>
+</html>
